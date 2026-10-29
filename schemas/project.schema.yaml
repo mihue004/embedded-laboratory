@@ -1,0 +1,132 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Embedded Lab Project Contract
+description: Machine-readable contract for projects managed by Embedded Lab.
+type: object
+additionalProperties: false
+
+required:
+  - schema_version
+  - project
+  - target
+  - build
+  - requirements
+  - testing
+  - artifacts
+
+properties:
+  schema_version:
+    type: string
+    const: "1.0"
+
+  project:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - name
+      - version
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      name:
+        type: string
+        minLength: 1
+      version:
+        type: string
+        pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+      description:
+        type: string
+
+  target:
+    type: object
+    additionalProperties: false
+    required:
+      - platform
+    properties:
+      platform:
+        type: string
+        enum:
+          - pico-sdk
+          - platformio
+          - stm32cube
+          - arduino
+          - custom
+      controller:
+        type: string
+        minLength: 1
+      board:
+        type: string
+        minLength: 1
+
+  build:
+    type: object
+    additionalProperties: false
+    required:
+      - system
+      - source_dir
+      - build_dir
+    properties:
+      system:
+        type: string
+        enum:
+          - cmake
+          - platformio
+          - make
+      source_dir:
+        $ref: "#/$defs/relativePath"
+      build_dir:
+        $ref: "#/$defs/relativePath"
+      preset:
+        type: string
+      options:
+        type: array
+        items:
+          type: string
+
+  requirements:
+    type: object
+    additionalProperties: false
+    required:
+      - file
+    properties:
+      file:
+        $ref: "#/$defs/relativePath"
+
+  testing:
+    type: object
+    additionalProperties: false
+    required:
+      - hardware_profiles
+    properties:
+      unit_test_dir:
+        $ref: "#/$defs/relativePath"
+      integration_test_dir:
+        $ref: "#/$defs/relativePath"
+      hardware_test_dir:
+        $ref: "#/$defs/relativePath"
+      hardware_profiles:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+  artifacts:
+    type: object
+    additionalProperties: false
+    required:
+      - directory
+      - reports_directory
+    properties:
+      directory:
+        $ref: "#/$defs/relativePath"
+      reports_directory:
+        $ref: "#/$defs/relativePath"
+
+$defs:
+  relativePath:
+    type: string
+    minLength: 1
+    description: Relative path without parent-directory traversal.
+    pattern: "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"

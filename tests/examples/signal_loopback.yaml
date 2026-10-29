@@ -1,0 +1,111 @@
+name: pico_dual_signal_matrix
+description: Frequenz- und Tastgradtest zwischen Pico A und Pico B
+
+steps:
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1
+    duty_percent: 90
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10
+    duty_percent: 90
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 100
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 100
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 100
+    duty_percent: 90
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1000
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1000
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 1000
+    duty_percent: 90
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 5000
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 5000
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 5000
+    duty_percent: 90
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10000
+    duty_percent: 10
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10000
+    duty_percent: 50
+
+  - action: signal.measure
+    generator_pin: 15
+    analyzer_pin: 16
+    frequency_hz: 10000
+    duty_percent: 90

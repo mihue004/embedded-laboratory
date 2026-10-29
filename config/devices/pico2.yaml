@@ -1,0 +1,53 @@
+# Hardware-class profile only.
+# This does not claim that the currently installed firmware supports
+# or has verified all listed capabilities.
+
+schema_version: "1.0"
+
+device_class: raspberry-pi-pico-2
+
+hardware:
+  platform: rp2350
+  controller: RP2350
+  board: pico2
+
+capabilities:
+  - id: gpio.input
+    layer: hardware
+    status: potential
+
+  - id: gpio.output
+    layer: hardware
+    status: potential
+
+  - id: pwm.generation
+    layer: hardware
+    status: potential
+
+  - id: signal.measurement
+    layer: hardware
+    status: potential
+
+  - id: interrupt.capture
+    layer: hardware
+    status: potential
+
+  - id: uart
+    layer: hardware
+    status: potential
+
+  - id: spi
+    layer: hardware
+    status: potential
+
+  - id: i2c
+    layer: hardware
+    status: potential
+
+  - id: adc
+    layer: hardware
+    status: potential
+
+  - id: pio
+    layer: hardware
+    status: potential

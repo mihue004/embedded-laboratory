@@ -1,0 +1,35 @@
+# Example project configuration.
+# Copy this file to the root of a project and adapt it there.
+
+schema_version: "1.0"
+
+project:
+  id: example-pico-app
+  name: Example Pico Application
+  version: "0.1.0"
+  description: Example configuration for a Raspberry Pi Pico SDK project.
+
+target:
+  platform: pico-sdk
+  controller: RP2350
+  board: pico2
+
+build:
+  system: cmake
+  source_dir: "."
+  build_dir: "build"
+  options: []
+
+requirements:
+  file: requirements/requirements.yaml
+
+testing:
+  unit_test_dir: tests/unit
+  integration_test_dir: tests/integration
+  hardware_test_dir: tests/hardware
+  hardware_profiles:
+    - pico-loopback
+
+artifacts:
+  directory: artifacts
+  reports_directory: artifacts/reports

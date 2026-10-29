@@ -1,0 +1,72 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Embedded Lab Device Profile
+type: object
+additionalProperties: false
+
+required:
+  - schema_version
+  - device_class
+  - hardware
+  - capabilities
+
+properties:
+  schema_version:
+    type: string
+    const: "1.0"
+
+  device_class:
+    type: string
+    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+  hardware:
+    type: object
+    additionalProperties: false
+    required:
+      - platform
+      - controller
+      - board
+    properties:
+      platform:
+        type: string
+        minLength: 1
+      controller:
+        type: string
+        minLength: 1
+      board:
+        type: string
+        minLength: 1
+
+  capabilities:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - layer
+        - status
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+        layer:
+          type: string
+          enum:
+            - hardware
+            - firmware
+            - external
+        status:
+          type: string
+          enum:
+            - potential
+            - implemented
+            - verified
+            - disabled
+        resources:
+          type: array
+          items:
+            type: string
+        parameters:
+          type: object
+          additionalProperties: true

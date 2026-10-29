@@ -1,0 +1,31 @@
+schema_version: "1.0"
+
+project:
+  id: pico-testbench
+  name: Pico Testbench Firmware
+  version: 0.1.0
+  description: Serial command interface and PIO signal generation for embedded testing.
+
+target:
+  platform: pico-sdk
+  controller: RP2350
+  board: pico2
+
+build:
+  system: cmake
+  source_dir: .
+  build_dir: build
+  options: []
+
+requirements:
+  file: requirements/requirements.yaml
+
+testing:
+  unit_test_dir: tests/unit
+  hardware_test_dir: tests/hardware
+  hardware_profiles:
+    - pico2
+
+artifacts:
+  directory: artifacts
+  reports_directory: artifacts/reports

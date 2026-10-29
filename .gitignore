@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# CMake / C and C++ build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.o
+*.a
+*.elf
+*.uf2
+*.hex
+*.bin
+*.map
+
+# Local test results and generated artifacts
+artifacts/results/
+artifacts/tmp/
+artifacts/logs/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Python test and coverage output
+.coverage
+htmlcov/
+
+# Imported project build outputs
+staging/*/build/

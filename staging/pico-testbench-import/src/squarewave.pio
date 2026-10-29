@@ -1,0 +1,17 @@
+.program squarewave
+    pull block
+    out y, 32
+    pull block
+    out isr, 32
+
+.wrap_target
+    set pins, 1
+    mov x, y
+high_loop:
+    jmp x-- high_loop
+
+    set pins, 0
+    mov x, isr
+low_loop:
+    jmp x-- low_loop
+.wrap

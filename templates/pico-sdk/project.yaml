@@ -1,0 +1,31 @@
+schema_version: "1.0"
+
+project:
+  id: example-pico-app
+  name: Example Pico Application
+  version: "0.1.0"
+  description: Starter project for Raspberry Pi Pico 2.
+
+target:
+  platform: pico-sdk
+  controller: RP2350
+  board: pico2
+
+build:
+  system: cmake
+  source_dir: "."
+  build_dir: "build/pico2"
+  options: []
+
+requirements:
+  file: requirements/requirements.yaml
+
+testing:
+  unit_test_dir: tests/unit
+  hardware_test_dir: tests/hardware
+  hardware_profiles:
+    - pico-loopback
+
+artifacts:
+  directory: artifacts
+  reports_directory: artifacts/reports

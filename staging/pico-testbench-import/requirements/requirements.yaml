@@ -1,0 +1,12 @@
+requirements_version: "1.0"
+
+requirements:
+  - id: REQ-SERIAL-001
+    description: Firmware shall initialize USB serial output and emit READY,TESTBENCH,1 at startup.
+    verification:
+      - hardware_test: HW-SERIAL-001
+
+  - id: REQ-CMD-001
+    description: Firmware shall process supported serial commands STATUS, STOP, WRITE, READ, and SIG.
+    verification:
+      - hardware_test: HW-COMMAND-001

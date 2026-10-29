@@ -1,0 +1,12 @@
+requirements_version: "1.0"
+
+requirements:
+  - id: REQ-SYS-001
+    description: Firmware shall initialize USB serial output.
+    verification:
+      - hardware_test: HW-SERIAL-001
+
+  - id: REQ-SYS-002
+    description: Firmware shall emit a startup status message periodically.
+    verification:
+      - hardware_test: HW-SERIAL-001
