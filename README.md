@@ -41,6 +41,51 @@ The hardware test runner communicates with connected devices over serial interfa
 
 Build execution currently supports configured CMake, Make, and PlatformIO projects, subject to the required tools being installed.
 
+## Universal Pico Firmware
+
+The repository includes a universal firmware for the Raspberry Pi Pico 2.
+
+### Implemented functions
+
+- Configurable GPIO modes: INPUT, OUTPUT, GEN, ANALYZER
+- PIO-based digital signal generation
+- GPIO interrupt-based signal analysis
+- GPIO read and write commands
+- Frequency, period, and duty-cycle measurements
+- Persistent device configuration in flash memory
+- GPIO and PIO resource management
+- Serial command interface at 115200 baud
+
+### Serial commands
+
+| Command | Description |
+|---|---|
+| PIN | Configure a GPIO pin |
+| SIG | Configure signal generation |
+| ANALYZE | Start signal analysis |
+| STOP | Stop generation or analysis |
+| READ / WRITE | Read or write GPIO states |
+| MEASURE / STREAM | Retrieve measurement data |
+| STATUS / HELP | Display status or command help |
+| I2C / SPI / UART | Configure peripheral parameters |
+
+I2C, SPI, and UART currently provide configuration commands. Complete communication workflows and hardware validation are still under development.
+
+### Build
+
+Run the following commands from the repository root:
+
+    cmake -S firmware/pico_universal -B firmware/pico_universal/build -DPICO_BOARD=pico2
+    cmake --build firmware/pico_universal/build -j4
+
+The resulting UF2 file is located at:
+
+`firmware/pico_universal/build/pico_universal_firmware.uf2`
+
+### Hardware validation
+
+Basic signal generation and measurement have been verified on a Raspberry Pi Pico 2 using a GPIO loopback connection. A 10 Hz signal with a 50% duty cycle was successfully measured.
+
 ## Technical Requirements
 
 ### Minimum Requirements
@@ -147,7 +192,8 @@ The platform is under active development. The following capabilities are planned
 - **Hardware selection:** Selecting available Pico devices through the web interface instead of relying on hardcoded device identifiers.
 - **System settings:** A central settings area for managing connected devices and system-wide configuration.
 - **Extended hardware abstraction:** Support for additional microcontrollers, measurement devices, and debugging interfaces.
-- **Extended signal testing:** More advanced measurements for PWM, interrupts, timing behavior, and fast digital signals.
+- **Extended signal testing:** Higher-frequency measurements, advanced timing analysis, and additional signal test modes.
+- **Peripheral integration:** Complete runtime integration and hardware validation of I2C, SPI, and UART communication.
 - **Simulation:** Logical test execution and fault-case simulation before testing on physical hardware.
 - **Automated flashing:** Integration of firmware flashing and device management into the orchestrated workflow.
 
@@ -172,7 +218,8 @@ embedded-laboratory/
 ├── templates/              # Reusable embedded project templates
 ├── tests/
 │   ├── examples/           # Example test definitions
-│   └── unit/               # Unit tests
+│   ├── unit/               # Python unit tests
+│   └── c/                  # C firmware unit tests
 ├── artifacts/              # Locally generated results
 ├── pico-sdk/               # Raspberry Pi Pico SDK submodule
 ├── requirements.txt
