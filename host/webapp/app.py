@@ -12,7 +12,7 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECTS_ROOT = Path(
@@ -27,6 +27,9 @@ from orchestrator import plan_project
 from build_executor import execute_build
 
 app = Flask(__name__)
+from settings.routes import settings_bp
+
+app.register_blueprint(settings_bp, url_prefix="/settings")
 app.secret_key = os.environ.get("EMBEDDED_LAB_SESSION_SECRET") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -35,6 +38,57 @@ app.config.update(
 
 BUILD_JOBS = {}
 BUILD_JOBS_LOCK = threading.Lock()
+
+MAX_BUILD_JOBS = 20
+MAX_BUILD_EVENTS = 2000
+BUILD_JOB_RETENTION_SECONDS = 1800
+
+
+def _cleanup_build_jobs_locked(now=None, reserve_slot=False):
+    now = time.time() if now is None else now
+
+    expired = [
+        job_id
+        for job_id, job in BUILD_JOBS.items()
+        if job.get("finished")
+        and job.get("finished_at") is not None
+        and now - job["finished_at"] >= BUILD_JOB_RETENTION_SECONDS
+    ]
+    for job_id in expired:
+        del BUILD_JOBS[job_id]
+
+    limit = MAX_BUILD_JOBS - 1 if reserve_slot else MAX_BUILD_JOBS
+
+    while len(BUILD_JOBS) > limit:
+        finished_jobs = [
+            (job.get("finished_at") or job.get("created_at") or 0, job_id)
+            for job_id, job in BUILD_JOBS.items()
+            if job.get("finished")
+        ]
+        if not finished_jobs:
+            break
+
+        _, oldest_job_id = min(finished_jobs)
+        del BUILD_JOBS[oldest_job_id]
+
+
+def cleanup_build_jobs(now=None):
+    with BUILD_JOBS_LOCK:
+        _cleanup_build_jobs_locked(now=now)
+
+
+def append_build_event(job_id, event):
+    with BUILD_JOBS_LOCK:
+        job = BUILD_JOBS.get(job_id)
+        if job is None:
+            return
+
+        job["events"].append(event)
+        overflow = len(job["events"]) - MAX_BUILD_EVENTS
+        if overflow > 0:
+            del job["events"][:overflow]
+            job["event_offset"] = job.get("event_offset", 0) + overflow
+
 
 def project_fingerprint(project_dir):
     """Hash project files while excluding generated output and caches."""
@@ -81,409 +135,6 @@ def build_approval_token(project_name, fingerprint):
     key = str(app.secret_key).encode("utf-8")
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
-PAGE = """
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Embedded Lab</title>
-<style>
-:root {
-  color-scheme: dark;
-  font-family: system-ui, sans-serif;
-  background: #121612;
-  color: #e8eee7;
-}
-* { box-sizing: border-box; }
-body { margin: 0; }
-header { padding: 24px max(20px, calc((100% - 1100px)/2)); background: #1b241b; border-bottom: 1px solid #354435; }
-main { max-width: 1100px; margin: auto; padding: 24px 20px 60px; }
-h1 { margin: 0; font-size: 1.7rem; }
-h2 { font-size: 1.2rem; margin-top: 0; }
-p, .muted { color: #b6c2b3; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
-.panel { background: #1b211b; border: 1px solid #354435; border-radius: 10px; padding: 20px; margin-bottom: 22px; min-width: 0; }
-label { display: block; margin: 12px 0 5px; }
-input, select, textarea, button { font: inherit; }
-input, select, textarea { width: 100%; padding: 10px; background: #111711; color: #e8eee7; border: 1px solid #536353; border-radius: 5px; }
-textarea { min-height: 90px; resize: vertical; }
-button { margin-top: 14px; padding: 10px 14px; background: #56b04c; color: #101610; border: 0; border-radius: 5px; cursor: pointer; font-weight: 650; }
-button:hover { background: #71e864; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid #354435; overflow-wrap: anywhere; }
-th { color: #b6c2b3; }
-code { overflow-wrap: anywhere; }
-.notice { padding: 12px; border: 1px solid #536353; border-radius: 5px; margin: 12px 0; }
-.error { border-color: #bd7168; }
-.success { border-color: #56b04c; }
-ul { padding-left: 22px; }
-small { color: #b6c2b3; }
-@media(max-width: 600px) { main { padding: 16px 12px; } .panel { padding: 14px; } }
-</style>
-</head>
-<body>
-<header>
-  <h1>Embedded Lab</h1>
-  <p>Embedded-Entwicklung, Projektanalyse und nachvollziehbare Tests</p>
-</header>
-<main>
-  {% for category, message in get_flashed_messages(with_categories=true) %}
-    <div class="notice {{ category }}">{{ message }}</div>
-  {% endfor %}
-
-  <section class="panel">
-    <h2>Projektübersicht</h2>
-    <p>Projektablage: <code>{{ projects_root }}</code></p>
-    {% if projects %}
-    <table>
-      <thead><tr><th>Projekt</th><th>Validierung</th><th>Beschreibung</th></tr></thead>
-      <tbody>
-      {% for project in projects %}
-        <tr>
-          <td><strong>{{ project.name }}</strong><br><small>{{ project.id }}</small></td>
-          <td>
-            {% if project.errors %}
-              <span>Ungültig</span>
-              <ul>{% for error in project.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-            {% elif project.has_contract %}
-              Gültig
-            {% else %}
-              Kein Projektvertrag
-            {% endif %}
-          </td>
-          <td>{{ project.description or "Keine Beschreibung" }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <p>Noch keine Projekte vorhanden.</p>
-    {% endif %}
-  </section>
-
-  <div class="grid">
-    <section class="panel">
-      <h2>Neues Projekt</h2>
-      <form method="post" action="{{ url_for('create') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label for="project_id">Projekt-ID</label>
-        <input id="project_id" name="project_id" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="mein-embedded-projekt">
-        <label for="project_name">Projektname</label>
-        <input id="project_name" name="project_name" required placeholder="Mein Embedded-Projekt">
-        <label for="description">Beschreibung</label>
-        <textarea id="description" name="description" placeholder="Zweck, Funktionen und Anforderungen"></textarea>
-        <button type="submit">Projekt erstellen</button>
-      </form>
-      <small>Verwendet das vorhandene Pico-SDK-Template.</small>
-    </section>
-
-    <section class="panel">
-      <h2>Repository importieren</h2>
-      <form method="post" action="{{ url_for('import_project') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label for="source">Lokaler Pfad oder Git-URL</label>
-        <input id="source" name="source" required placeholder="/home/pi/mein-repository oder https://...">
-        <label for="project_id_import">Neue Projekt-ID</label>
-        <input id="project_id_import" name="project_id" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="importiertes-projekt">
-        <label for="import_mode">Quelle</label>
-        <select id="import_mode" name="mode">
-          <option value="local">Lokales Verzeichnis kopieren</option>
-          <option value="git">Git-Repository klonen</option>
-        </select>
-        <button type="submit">Importieren</button>
-      </form>
-      <small>Bestehende Zielverzeichnisse werden nicht überschrieben. Importierter Code wird nicht ausgeführt.</small>
-    </section>
-  </div>
-
-  <section class="panel">
-    <h2>Projektanalyse</h2>
-    <p>Prüft Projektvertrag, Anforderungen, Build-Konfiguration und Testverzeichnisse. Es werden keine Builds oder Tests gestartet und keine Projektdateien verändert.</p>
-    <form method="post" action="{{ url_for('analyze') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="analysis_project">Projekt</label>
-      <select id="analysis_project" name="project" required>
-        {% for project in project_names %}
-          <option value="{{ project }}">{{ project }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Projekt analysieren</button>
-    </form>
-    {% if analysis %}
-      <div class="notice">
-        <strong>Analyse: {{ analysis.name }}</strong>
-        <p>Projektvertrag: {{ "vorhanden" if analysis.has_contract else "fehlt" }}</p>
-        {% if analysis.errors %}
-          <strong>Validierungsfehler</strong>
-          <ul>{% for error in analysis.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-        {% endif %}
-        <p>Anforderungsdatei: {{ analysis.requirements or "nicht konfiguriert" }}</p>
-        <p>Gefundene Testdateien: {{ analysis.tests|length }}</p>
-        <ul>{% for test in analysis.tests %}<li><code>{{ test }}</code></li>{% else %}<li>Keine Testdateien gefunden.</li>{% endfor %}</ul>
-        <p>Hinweis: Das Vorhandensein von Tests beweist weder deren Vollständigkeit noch die Korrektheit der Firmware.</p>
-
-        {% if analysis.plan %}
-          <hr>
-          <h3>Ablaufplan</h3>
-          <p><strong>Status:</strong> {{ analysis.plan.status }}</p>
-          <p><strong>Modus:</strong> Nur Planung – keine Ausführung</p>
-          <p><strong>Build oder Tests ausgeführt:</strong> Nein</p>
-          <p><strong>Firmware geflasht:</strong> Nein</p>
-
-          {% if analysis.plan.errors %}
-            <strong>Fehler</strong>
-            <ul>{% for error in analysis.plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-          {% endif %}
-
-          {% if analysis.plan.warnings %}
-            <strong>Hinweise</strong>
-            <ul>{% for warning in analysis.plan.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
-          {% endif %}
-
-          <h4>Prüfergebnisse</h4>
-          <ul>
-            {% for key, check in analysis.plan.checks.items() %}
-              <li>
-                <strong>{{ key }}:</strong>
-                {% if check.status is defined %}
-                  {{ check.status }}
-                {% else %}
-                  Details siehe Unterpunkte
-                {% endif %}
-                {% if check.count is defined %}
-                  ({{ check.count }} Anforderungen)
-                {% endif %}
-                {% if check.errors %}
-                  <ul>{% for error in check.errors %}<li><strong>Fehler:</strong> {{ error }}</li>{% endfor %}</ul>
-                {% endif %}
-                {% if check.warnings %}
-                  <ul>{% for warning in check.warnings %}<li><strong>Hinweis:</strong> {{ warning }}</li>{% endfor %}</ul>
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ul>
-
-          {% if analysis.plan.checks.traceability %}
-            {% set trace = analysis.plan.checks.traceability %}
-            <h4>Traceability – Anforderungsabdeckung</h4>
-            <p>
-              Status: <strong>{{ trace.status }}</strong> –
-              {{ trace.covered_requirements|length }} von
-              {{ trace.requirement_count }} Anforderungen mit auflösbarem
-              Hardwaretest.
-              {{ trace.test_case_count }} Testfälle gefunden.
-            </p>
-
-            {% if trace.covered_requirements %}
-              <p><strong>Abgedeckte Anforderungen</strong></p>
-              <ul>{% for item in trace.covered_requirements %}<li>{{ item }}</li>{% endfor %}</ul>
-            {% endif %}
-
-            {% if trace.uncovered_requirements %}
-              <p><strong>Nicht abgedeckte Anforderungen</strong></p>
-              <ul>{% for item in trace.uncovered_requirements %}<li>{{ item }}</li>{% endfor %}</ul>
-            {% endif %}
-
-            {% if trace.unresolved_test_references %}
-              <p><strong>Nicht auflösbare Testreferenzen</strong></p>
-              <ul>{% for item in trace.unresolved_test_references %}
-                <li>Anforderung {{ item.requirement_id }} → Test {{ item.test_id }}</li>
-              {% endfor %}</ul>
-            {% endif %}
-
-            {% if trace.unknown_requirement_references %}
-              <p><strong>Unbekannte Requirement-Referenzen</strong></p>
-              <ul>{% for item in trace.unknown_requirement_references %}
-                <li>Test {{ item.test_id }} → Anforderung {{ item.requirement_id }}</li>
-              {% endfor %}</ul>
-            {% endif %}
-          {% endif %}
-
-          {% if analysis.plan.checks.requirements.requirements %}
-            <h4>Erkannte Anforderungen</h4>
-            <ul>
-              {% for requirement in analysis.plan.checks.requirements.requirements %}
-                <li>
-                  <strong>{{ requirement.id or "Ohne ID" }}:</strong>
-                  {{ requirement.description or "Keine Beschreibung" }}
-                </li>
-              {% endfor %}
-            </ul>
-          {% endif %}
-
-          <h4>Geplante Schritte</h4>
-          <ul>
-            {% for step in analysis.plan.steps %}
-              <li>
-                <strong>{{ step.id }}:</strong> {{ step.description }}
-                <br><small>Status: {{ step.status }}
-                {% if step.requires_approval %} – Freigabe erforderlich{% endif %}
-                {% if step.requires_explicit_approval %} – ausdrückliche Freigabe erforderlich{% endif %}
-                </small>
-              </li>
-            {% endfor %}
-          </ul>
-
-          {% if analysis.plan.status == "ready_for_review" and not analysis.errors and not analysis.plan.errors %}
-            <div class="notice">
-              <strong>Build manuell freigeben</strong>
-              <p>Es werden Build-Kommandos für dieses Projekt ausgeführt. Es wird keine Firmware geflasht und es werden keine Tests gestartet.</p>
-              <form method="post" action="{{ url_for('build_project') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="project" value="{{ analysis.id }}">
-                <input type="hidden" name="fingerprint"
-                       value="{{ analysis.fingerprint }}">
-                <input type="hidden" name="approval_token"
-                       value="{{ analysis.approval_token }}">
-                <label>
-                  <input type="checkbox" name="confirm_build" value="yes" required style="width:auto">
-                  Ich erlaube ausdrücklich, den Build für dieses Projekt auszuführen.
-                </label>
-                <button type="submit">Build jetzt ausführen</button>
-              </form>
-            </div>
-          {% endif %}
-        {% endif %}
-
-        {% if analysis.build_result %}
-          <hr>
-          <h3>Build-Ergebnis</h3>
-          <p><strong>Status:</strong> <span id="build-status">{{ analysis.build_result.status }}</span></p>
-          <p><strong>Build ausgeführt:</strong> {{ "Ja" if analysis.build_result.execution_performed else "Nein" }}</p>
-          <p><strong>Firmware geflasht:</strong> Nein</p>
-          <p><strong>Tests ausgeführt:</strong> Nein</p>
-
-          {% if analysis.build_result.errors %}
-            <strong>Fehler und Hinweise</strong>
-            <ul>{% for error in analysis.build_result.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-          {% endif %}
-
-          {% if analysis.build_result.report_path %}
-            <p>Bericht: <code>{{ analysis.build_result.report_path }}</code></p>
-          {% endif %}
-
-          {% for command in analysis.build_result.commands %}
-            <div class="notice">
-              <strong>Kommando – Status: {{ command.status }}</strong>
-              <p><code>{{ command.argv | join(" ") }}</code></p>
-              {% if command.returncode is not none %}
-                <p>Rückgabecode: {{ command.returncode }}</p>
-              {% endif %}
-              {% if command.stdout %}
-                <details>
-                  <summary>Standardausgabe</summary>
-                  <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">{{ command.stdout[:12000] }}</pre>
-                </details>
-              {% endif %}
-              {% if command.stderr %}
-                <details open>
-                  <summary>Fehlerausgabe</summary>
-                  <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">{{ command.stderr[:12000] }}</pre>
-                </details>
-              {% endif %}
-            </div>
-          {% endfor %}
-        {% endif %}
-      </div>
-    {% endif %}
-  </section>
-  <p class="muted"><small>Erste Entwicklungsstufe: KI-Backend, Freigabeworkflow und autonome Build-/Testschleifen sind noch nicht aktiviert. Kein automatisches Flashen.</small></p>
-</main>
-{% if analysis.build_result and analysis.build_result.job_id %}
-<script>
-(async () => {
-  const url = {{ url_for('build_logs', job_id=analysis.build_result.job_id) | tojson }};
-  const status = document.getElementById('build-status');
-  const resultSection = [...document.querySelectorAll('h3')]
-    .find(element => element.textContent.trim() === 'Build-Ergebnis');
-
-  if (!resultSection || !status) return;
-
-  const container = document.createElement('div');
-  container.id = 'live-build-commands';
-  resultSection.insertAdjacentElement('afterend', container);
-
-  const commands = new Map();
-  let count = 0;
-
-  function getCommand(index, argv) {
-    if (commands.has(index)) return commands.get(index);
-
-    const card = document.createElement('div');
-    card.className = 'notice';
-
-    const heading = document.createElement('strong');
-    heading.textContent = 'Kommando – Status: läuft';
-
-    const commandLine = document.createElement('p');
-    const code = document.createElement('code');
-    code.textContent = Array.isArray(argv) ? argv.join(' ') : '';
-    commandLine.appendChild(code);
-
-    const output = document.createElement('pre');
-    output.style.cssText =
-      'white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto';
-
-    card.append(heading, commandLine, output);
-    container.appendChild(card);
-
-    const item = { heading, output };
-    commands.set(index, item);
-    return item;
-  }
-
-  while (true) {
-    try {
-      const response = await fetch(`${url}?after=${count}`);
-      if (!response.ok) {
-        status.textContent = 'Fehler beim Abrufen der Build-Ausgabe';
-        break;
-      }
-
-      const data = await response.json();
-
-      for (const event of data.events) {
-        if (event.type === 'command_started') {
-          getCommand(event.command_index, event.argv);
-        } else if (event.type === 'command_output') {
-          const item = getCommand(event.command_index);
-          item.output.textContent += `[${event.stream}] ${event.line}\n`;
-          item.output.scrollTop = item.output.scrollHeight;
-        } else if (event.type === 'command_finished') {
-          const item = getCommand(event.command_index, event.argv);
-          item.heading.textContent =
-            `Kommando – Status: ${event.status}` +
-            (event.returncode !== undefined
-              ? ` (Rückgabecode: ${event.returncode})`
-              : '');
-        }
-      }
-
-      count = data.next;
-
-      if (data.finished) {
-        if (data.error) {
-          status.textContent = `Fehler: ${data.error}`;
-        } else if (data.result) {
-          status.textContent = data.result.status;
-        }
-        break;
-      }
-    } catch (error) {
-      status.textContent = `Verbindungsfehler: ${error}`;
-      break;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-})();
-</script>
-{% endif %}
-</body>
-</html>
-"""
-
 
 def ensure_projects_root():
     PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -502,7 +153,10 @@ def csrf_token():
 @app.before_request
 def protect_post_requests():
     if request.method == "POST":
-        supplied = request.form.get("csrf_token", "")
+        supplied = (
+            request.form.get("csrf_token")
+            or request.headers.get("X-CSRF-Token", "")
+        )
         expected = session.get("csrf_token", "")
         if not expected or not secrets.compare_digest(supplied, expected):
             abort(400, "Ungültiges oder abgelaufenes Formular-Token.")
@@ -514,8 +168,7 @@ def inject_csrf_token():
 
 def run_build_job(job_id, project_path):
     def on_event(event):
-        with BUILD_JOBS_LOCK:
-            BUILD_JOBS[job_id]["events"].append(event)
+        append_build_event(job_id, event)
 
     try:
         result = execute_build(
@@ -524,12 +177,18 @@ def run_build_job(job_id, project_path):
             event_callback=on_event,
         )
         with BUILD_JOBS_LOCK:
-            BUILD_JOBS[job_id]["result"] = result
-            BUILD_JOBS[job_id]["finished"] = True
+            job = BUILD_JOBS.get(job_id)
+            if job is not None:
+                job["result"] = result
+                job["finished"] = True
+                job["finished_at"] = time.time()
     except Exception as exc:
         with BUILD_JOBS_LOCK:
-            BUILD_JOBS[job_id]["error"] = str(exc)
-            BUILD_JOBS[job_id]["finished"] = True
+            job = BUILD_JOBS.get(job_id)
+            if job is not None:
+                job["error"] = str(exc)
+                job["finished"] = True
+                job["finished_at"] = time.time()
 
 def inspect_project(path):
     config = path / "project.yaml"
@@ -592,8 +251,8 @@ def list_projects():
 @app.get("/")
 def index():
     projects = list_projects()
-    return render_template_string(
-        PAGE,
+    return render_template(
+        "index.html",
         projects=projects,
         project_names=[p["name"] for p in projects],
         projects_root=PROJECTS_ROOT,
@@ -708,8 +367,8 @@ def analyze():
             )
 
     projects = list_projects()
-    return render_template_string(
-        PAGE,
+    return render_template(
+        "index.html",
         projects=projects,
         project_names=[p["name"] for p in projects],
         projects_root=PROJECTS_ROOT,
@@ -719,6 +378,7 @@ def analyze():
 @app.get("/projects/build/<job_id>/logs")
 def build_logs(job_id):
     owner = session.get("build_session_id", "")
+    cleanup_build_jobs()
     with BUILD_JOBS_LOCK:
         job = BUILD_JOBS.get(job_id)
         if job is None:
@@ -730,9 +390,13 @@ def build_logs(job_id):
         except ValueError:
             abort(400, "Ungültiger Ereignisindex.")
 
+        event_offset = job.get("event_offset", 0)
+        start = max(0, after - event_offset)
+
         return {
-            "events": job["events"][after:],
-            "next": len(job["events"]),
+            "events": job["events"][start:],
+            "event_offset": event_offset,
+            "next": event_offset + len(job["events"]),
             "finished": job["finished"],
             "result": job["result"],
             "error": job["error"],
@@ -804,9 +468,16 @@ def build_project():
         owner = session.setdefault("build_session_id", secrets.token_urlsafe(32))
         job_id = uuid.uuid4().hex
         with BUILD_JOBS_LOCK:
+            _cleanup_build_jobs_locked(reserve_slot=True)
+            if len(BUILD_JOBS) >= MAX_BUILD_JOBS:
+                abort(503, "Zu viele Build-Jobs laufen. Bitte später erneut versuchen.")
+
             BUILD_JOBS[job_id] = {
                 "owner": owner,
                 "events": [],
+                "event_offset": 0,
+                "created_at": time.time(),
+                "finished_at": None,
                 "finished": False,
                 "result": None,
                 "error": None,
@@ -827,8 +498,8 @@ def build_project():
             "report_path": None,
         }
 
-    return render_template_string(
-        PAGE,
+    return render_template(
+        "index.html",
         projects=list_projects(),
         project_names=[p["name"] for p in list_projects()],
         projects_root=PROJECTS_ROOT,

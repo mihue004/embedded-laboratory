@@ -57,7 +57,7 @@ bool device_config_validate(const device_config_t *config)
         const device_pin_config_t *entry = &config->pins[pin];
 
         if ((int)entry->function < (int)PIN_UNUSED ||
-            (int)entry->function > (int)PIN_UART_RX) {
+            (int)entry->function > (int)PIN_ADC_INPUT) {
             return false;
         }
 
@@ -70,6 +70,17 @@ bool device_config_validate(const device_config_t *config)
 
         if (!valid_gpio(pin)) {
             if (entry->function != PIN_UNUSED ||
+                entry->pio_priority != DEVICE_PIO_PRIORITY_MIN ||
+                entry->pull != GPIO_PULL_NONE ||
+                entry->initial_level != GPIO_LEVEL_LOW ||
+                entry->input_filter_us != 0) {
+                return false;
+            }
+        }
+
+        if (entry->function == PIN_ADC_INPUT) {
+            if (pin < 26 || pin > 28 ||
+                entry->peripheral_instance != 0 ||
                 entry->pio_priority != DEVICE_PIO_PRIORITY_MIN ||
                 entry->pull != GPIO_PULL_NONE ||
                 entry->initial_level != GPIO_LEVEL_LOW ||

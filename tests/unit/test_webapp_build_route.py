@@ -317,5 +317,160 @@ class TestWebBuildRoute(unittest.TestCase):
             webapp.BUILD_JOBS.pop(job_id, None)
 
 
+    def test_build_event_limit_advances_absolute_offset(self):
+        job_id = "test-event-limit"
+        webapp.BUILD_JOBS[job_id] = {
+            "owner": "test-session",
+            "events": [{"number": i} for i in range(2000)],
+            "event_offset": 0,
+            "finished": False,
+            "result": None,
+            "error": None,
+        }
+
+        try:
+            webapp.append_build_event(job_id, {"number": 2000})
+            job = webapp.BUILD_JOBS[job_id]
+
+            self.assertEqual(len(job["events"]), 2000)
+            self.assertEqual(job["event_offset"], 1)
+            self.assertEqual(job["events"][0]["number"], 1)
+            self.assertEqual(job["events"][-1]["number"], 2000)
+        finally:
+            webapp.BUILD_JOBS.pop(job_id, None)
+
+    def test_build_logs_respect_absolute_event_offset(self):
+        job_id = "test-event-offset"
+        owner = "test-offset-session"
+        webapp.BUILD_JOBS[job_id] = {
+            "owner": owner,
+            "events": [{"number": 0}, {"number": 1}, {"number": 2}],
+            "event_offset": 5,
+            "finished": True,
+            "result": None,
+            "error": None,
+        }
+
+        try:
+            with self.client.session_transaction() as sess:
+                sess["build_session_id"] = owner
+
+            response = self.client.get(
+                f"/projects/build/{job_id}/logs?after=6"
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["event_offset"], 5)
+            self.assertEqual(data["next"], 8)
+            self.assertEqual(
+                [event["number"] for event in data["events"]], [1, 2]
+            )
+        finally:
+            webapp.BUILD_JOBS.pop(job_id, None)
+
+    def test_cleanup_removes_expired_finished_jobs_only(self):
+        now = 100000
+        webapp.BUILD_JOBS["expired-job"] = {
+            "owner": "owner",
+            "events": [],
+            "event_offset": 0,
+            "created_at": now - 5000,
+            "finished_at": now - 2000,
+            "finished": True,
+            "result": None,
+            "error": None,
+        }
+        webapp.BUILD_JOBS["running-job"] = {
+            "owner": "owner",
+            "events": [],
+            "event_offset": 0,
+            "created_at": now - 5000,
+            "finished_at": None,
+            "finished": False,
+            "result": None,
+            "error": None,
+        }
+
+        try:
+            webapp.cleanup_build_jobs(now=now)
+            self.assertNotIn("expired-job", webapp.BUILD_JOBS)
+            self.assertIn("running-job", webapp.BUILD_JOBS)
+        finally:
+            webapp.BUILD_JOBS.pop("expired-job", None)
+            webapp.BUILD_JOBS.pop("running-job", None)
+
+    def test_cleanup_limits_jobs_without_removing_running_jobs(self):
+        now = 100000
+        for index in range(21):
+            webapp.BUILD_JOBS[f"finished-{index}"] = {
+                "owner": "owner",
+                "events": [],
+                "event_offset": 0,
+                "created_at": now - 1000 + index,
+                "finished_at": now - 100 + index,
+                "finished": True,
+                "result": None,
+                "error": None,
+            }
+
+        webapp.BUILD_JOBS["active-job"] = {
+            "owner": "owner",
+            "events": [],
+            "event_offset": 0,
+            "created_at": now - 5000,
+            "finished_at": None,
+            "finished": False,
+            "result": None,
+            "error": None,
+        }
+
+        try:
+            webapp.cleanup_build_jobs(now=now)
+            self.assertEqual(len(webapp.BUILD_JOBS), 20)
+            self.assertIn("active-job", webapp.BUILD_JOBS)
+        finally:
+            for job_id in list(webapp.BUILD_JOBS):
+                if job_id.startswith("finished-") or job_id == "active-job":
+                    webapp.BUILD_JOBS.pop(job_id, None)
+
+
+    def test_build_rejected_when_all_job_slots_are_running(self):
+        with webapp.BUILD_JOBS_LOCK:
+            previous_jobs = webapp.BUILD_JOBS.copy()
+            webapp.BUILD_JOBS.clear()
+
+        try:
+            for index in range(webapp.MAX_BUILD_JOBS):
+                job_id = f"active-capacity-{index}"
+                webapp.BUILD_JOBS[job_id] = {
+                    "owner": "owner",
+                    "events": [],
+                    "event_offset": 0,
+                    "created_at": 100000 + index,
+                    "finished_at": None,
+                    "finished": False,
+                    "result": None,
+                    "error": None,
+                }
+
+            with (
+                patch.object(webapp.threading, "Thread") as thread,
+                patch.object(webapp, "plan_project",
+                             return_value=self.valid_plan),
+            ):
+                response = self.post_build(confirm_build="yes")
+
+            self.assertEqual(response.status_code, 503)
+            thread.assert_not_called()
+            self.assertEqual(len(webapp.BUILD_JOBS), webapp.MAX_BUILD_JOBS)
+            self.assertTrue(
+                all(not job["finished"] for job in webapp.BUILD_JOBS.values())
+            )
+        finally:
+            with webapp.BUILD_JOBS_LOCK:
+                webapp.BUILD_JOBS.clear()
+                webapp.BUILD_JOBS.update(previous_jobs)
+
+
 if __name__ == "__main__":
     unittest.main()

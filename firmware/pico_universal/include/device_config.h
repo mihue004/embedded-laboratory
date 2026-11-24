@@ -57,7 +57,8 @@ typedef enum {
     PIN_SPI_SCK,
     PIN_SPI_CS,
     PIN_UART_TX,
-    PIN_UART_RX
+    PIN_UART_RX,
+    PIN_ADC_INPUT = 13
 } device_pin_function_t;
 
 typedef enum {

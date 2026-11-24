@@ -15,6 +15,8 @@ set(PICO_FLASH_SIZE_BYTES 4128768)
 
 pico_sdk_init()
 
+add_compile_definitions(PICO_FLASH_SIZE_BYTES=4194304)
+
 add_library(pico_universal STATIC
     src/device_config.c
     src/resource_manager.c
@@ -42,6 +44,7 @@ target_include_directories(pico_universal PUBLIC
 target_link_libraries(pico_universal PUBLIC
     pico_stdlib
     hardware_gpio
+    hardware_adc
     hardware_pio
     hardware_spi
     hardware_i2c

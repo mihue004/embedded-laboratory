@@ -6,6 +6,7 @@
 #include "config_storage.h"
 
 #include "hardware/gpio.h"
+#include "hardware/adc.h"
 #include "pico/stdlib.h"
 
 #include <stdio.h>
@@ -14,8 +15,22 @@
 #include <string.h>
 #include <stddef.h>
 
+#define FIRMWARE_VERSION_MAJOR 0
+#define FIRMWARE_VERSION_MINOR 1
+#define FIRMWARE_VERSION_PATCH 0
+
+#define PROTOCOL_VERSION 1
+
 static resource_manager_t manager;
 static device_config_t config;
+
+static device_config_t pending_config;
+static bool config_transaction_active = false;
+
+static uint32_t config_pin_mask = 0;
+static uint8_t config_i2c_mask = 0;
+static uint8_t config_spi_mask = 0;
+static uint8_t config_uart_mask = 0;
 
 static void print_help(void)
 {
@@ -33,6 +48,16 @@ static void print_help(void)
     printf("I2C,<instance>,<baudrate>\n");
     printf("SPI,<instance>,<baudrate>,<bits>,<cpol>,<cpha>,<lsb>\n");
     printf("UART,<instance>,<baudrate>,<bits>,<stopbits>,<parity>\n");
+    printf("CONFIG,GET\n");
+    printf("CONFIG,BEGIN,<version>\n");
+    printf("CONFIG,PIN,<pin>,<function>,<instance>,<priority>,<pull>,<level>,<filter_us>\n");
+    printf("CONFIG,I2C,<instance>,<baudrate>\n");
+    printf("CONFIG,SPI,<instance>,<baudrate>,<bits>,<cpol>,<cpha>,<lsb>\n");
+    printf("CONFIG,UART,<instance>,<baudrate>,<bits>,<stopbits>,<parity>\n");
+    printf("CONFIG,COMMIT\n");
+    printf("CONFIG,ABORT\n");
+    printf("VERSION\n");
+    printf("CONFIG,DEBUG\n");
 }
 
 static bool parse_pin_function(
@@ -75,6 +100,29 @@ static bool apply_and_save_config(const device_config_t *next)
 
     if (result != RESOURCE_OK) {
         printf("ERR,CONFIG,%d\n", (int)result);
+
+        resource_status_t rollback =
+            device_runtime_apply_config_pico(&manager, &previous);
+
+        if (rollback != RESOURCE_OK) {
+            device_config_t safe_config;
+            device_config_init(&safe_config);
+
+            resource_status_t safe_result =
+                device_runtime_apply_config_pico(
+                    &manager,
+                    &safe_config
+                );
+
+            if (safe_result == RESOURCE_OK &&
+                config_storage_save(&safe_config)) {
+                config = safe_config;
+                printf("ERR,CONFIG,SAFE_DEFAULT\n");
+            } else {
+                printf("ERR,CONFIG,SAFE_STATE_FAILED\n");
+            }
+        }
+
         return false;
     }
 
@@ -94,6 +142,353 @@ static bool apply_and_save_config(const device_config_t *next)
     config = *next;
     printf("CONFIG,SAVED\n");
     return true;
+}
+
+static bool parse_config_values(
+    char *arguments,
+    unsigned long *values,
+    const unsigned long *maxima,
+    size_t count
+)
+{
+    if (arguments == NULL) {
+        return false;
+    }
+
+    char *token = strtok(arguments, ",");
+
+    for (size_t i = 0; i < count; ++i) {
+        if (token == NULL ||
+            !parse_unsigned(token, maxima[i], &values[i])) {
+            return false;
+        }
+
+        token = strtok(NULL, ",");
+    }
+
+    return token == NULL;
+}
+
+static void reset_config_transaction(void)
+{
+    config_transaction_active = false;
+    config_pin_mask = 0;
+    config_i2c_mask = 0;
+    config_spi_mask = 0;
+    config_uart_mask = 0;
+}
+
+static void command_config_get(void)
+{
+    printf("CONFIG,BEGIN,%u\n", DEVICE_CONFIG_VERSION);
+
+    for (unsigned int pin = 0; pin < DEVICE_GPIO_COUNT; ++pin) {
+        const device_pin_config_t *entry = &config.pins[pin];
+
+        printf(
+            "CONFIG,PIN,%u,%u,%u,%u,%u,%u,%lu\n",
+            pin,
+            (unsigned int)entry->function,
+            (unsigned int)entry->peripheral_instance,
+            (unsigned int)entry->pio_priority,
+            (unsigned int)entry->pull,
+            (unsigned int)entry->initial_level,
+            (unsigned long)entry->input_filter_us
+        );
+    }
+
+    for (unsigned int i = 0; i < 2; ++i) {
+        printf(
+            "CONFIG,I2C,%u,%lu\n",
+            i,
+            (unsigned long)config.peripherals.i2c[i].baudrate
+        );
+
+        printf(
+            "CONFIG,SPI,%u,%lu,%u,%u,%u,%u\n",
+            i,
+            (unsigned long)config.peripherals.spi[i].baudrate,
+            (unsigned int)config.peripherals.spi[i].data_bits,
+            (unsigned int)config.peripherals.spi[i].cpol,
+            (unsigned int)config.peripherals.spi[i].cpha,
+            config.peripherals.spi[i].lsb_first ? 1u : 0u
+        );
+
+        printf(
+            "CONFIG,UART,%u,%lu,%u,%u,%u\n",
+            i,
+            (unsigned long)config.peripherals.uart[i].baudrate,
+            (unsigned int)config.peripherals.uart[i].data_bits,
+            (unsigned int)config.peripherals.uart[i].stop_bits,
+            (unsigned int)config.peripherals.uart[i].parity
+        );
+    }
+
+    printf("CONFIG,END\n");
+}
+
+static void command_config_begin(char *arguments)
+{
+    if (arguments != NULL && *arguments != '\0') {
+        unsigned long version;
+
+        if (strchr(arguments, ',') != NULL ||
+            !parse_unsigned(arguments, UINT32_MAX, &version) ||
+            version != DEVICE_CONFIG_VERSION) {
+            printf("ERR,CONFIG_VERSION\n");
+            return;
+        }
+    }
+
+    device_config_init(&pending_config);
+
+    config_pin_mask = 0;
+    config_i2c_mask = 0;
+    config_spi_mask = 0;
+    config_uart_mask = 0;
+
+    config_transaction_active = true;
+
+    printf("CONFIG,READY\n");
+}
+
+static void command_config_pin(char *arguments)
+{
+    static const unsigned long maxima[] = {
+        DEVICE_GPIO_COUNT - 1,
+        PIN_ADC_INPUT,
+        1,
+        DEVICE_PIO_PRIORITY_MAX,
+        GPIO_PULL_DOWN,
+        GPIO_LEVEL_HIGH,
+        DEVICE_INPUT_FILTER_MAX_US
+    };
+
+    unsigned long values[7];
+
+    if (!config_transaction_active) {
+        printf("ERR,CONFIG_NO_TRANSACTION\n");
+        return;
+    }
+
+    if (!parse_config_values(arguments, values, maxima, 7)) {
+        printf("ERR,CONFIG_PIN_FORMAT\n");
+        return;
+    }
+
+    unsigned int pin = (unsigned int)values[0];
+
+    if (config_pin_mask & (1u << pin)) {
+        printf("ERR,CONFIG_PIN_DUPLICATE\n");
+        return;
+    }
+
+    device_pin_config_t *entry = &pending_config.pins[pin];
+
+    entry->function = (device_pin_function_t)values[1];
+    entry->peripheral_instance = (uint8_t)values[2];
+    entry->pio_priority = (uint8_t)values[3];
+    entry->pull = (device_gpio_pull_t)values[4];
+    entry->initial_level = (device_gpio_level_t)values[5];
+    entry->input_filter_us = (uint32_t)values[6];
+
+    config_pin_mask |= 1u << pin;
+
+    printf("CONFIG,PIN,OK,%u\n", pin);
+}
+
+static void command_config_i2c(char *arguments)
+{
+    static const unsigned long maxima[] = {
+        1, 1000000
+    };
+
+    unsigned long values[2];
+
+    if (!config_transaction_active) {
+        printf("ERR,CONFIG_NO_TRANSACTION\n");
+        return;
+    }
+
+    if (!parse_config_values(arguments, values, maxima, 2)) {
+        printf("ERR,CONFIG_I2C_FORMAT\n");
+        return;
+    }
+
+    unsigned int instance = (unsigned int)values[0];
+
+    if (config_i2c_mask & (1u << instance)) {
+        printf("ERR,CONFIG_I2C_DUPLICATE\n");
+        return;
+    }
+
+    pending_config.peripherals.i2c[instance].baudrate =
+        (uint32_t)values[1];
+
+    config_i2c_mask |= (uint8_t)(1u << instance);
+
+    printf("CONFIG,I2C,OK,%u\n", instance);
+}
+
+static void command_config_spi(char *arguments)
+{
+    static const unsigned long maxima[] = {
+        1, 10000000, 16, 1, 1, 1
+    };
+
+    unsigned long values[6];
+
+    if (!config_transaction_active) {
+        printf("ERR,CONFIG_NO_TRANSACTION\n");
+        return;
+    }
+
+    if (!parse_config_values(arguments, values, maxima, 6)) {
+        printf("ERR,CONFIG_SPI_FORMAT\n");
+        return;
+    }
+
+    unsigned int instance = (unsigned int)values[0];
+
+    if (config_spi_mask & (1u << instance)) {
+        printf("ERR,CONFIG_SPI_DUPLICATE\n");
+        return;
+    }
+
+    device_spi_config_t *entry =
+        &pending_config.peripherals.spi[instance];
+
+    entry->baudrate = (uint32_t)values[1];
+    entry->data_bits = (uint8_t)values[2];
+    entry->cpol = (uint8_t)values[3];
+    entry->cpha = (uint8_t)values[4];
+    entry->lsb_first = values[5] != 0;
+
+    config_spi_mask |= (uint8_t)(1u << instance);
+
+    printf("CONFIG,SPI,OK,%u\n", instance);
+}
+
+static void command_config_uart(char *arguments)
+{
+    static const unsigned long maxima[] = {
+        1, 4000000, 8, 2, DEVICE_UART_PARITY_ODD
+    };
+
+    unsigned long values[5];
+
+    if (!config_transaction_active) {
+        printf("ERR,CONFIG_NO_TRANSACTION\n");
+        return;
+    }
+
+    if (!parse_config_values(arguments, values, maxima, 5)) {
+        printf("ERR,CONFIG_UART_FORMAT\n");
+        return;
+    }
+
+    unsigned int instance = (unsigned int)values[0];
+
+    if (config_uart_mask & (1u << instance)) {
+        printf("ERR,CONFIG_UART_DUPLICATE\n");
+        return;
+    }
+
+    device_uart_config_t *entry =
+        &pending_config.peripherals.uart[instance];
+
+    entry->baudrate = (uint32_t)values[1];
+    entry->data_bits = (uint8_t)values[2];
+    entry->stop_bits = (uint8_t)values[3];
+    entry->parity = (device_uart_parity_t)values[4];
+
+    config_uart_mask |= (uint8_t)(1u << instance);
+
+    printf("CONFIG,UART,OK,%u\n", instance);
+}
+
+static void command_config_commit(void)
+{
+    const uint32_t required_pins =
+        (1u << DEVICE_GPIO_COUNT) - 1u;
+
+    if (!config_transaction_active) {
+        printf("ERR,CONFIG_NO_TRANSACTION\n");
+        return;
+    }
+
+    if (config_pin_mask != required_pins ||
+        config_i2c_mask != 0x03 ||
+        config_spi_mask != 0x03 ||
+        config_uart_mask != 0x03) {
+        printf("ERR,CONFIG_INCOMPLETE\n");
+        return;
+    }
+
+    pending_config.config_version = DEVICE_CONFIG_VERSION;
+
+    if (!device_config_validate(&pending_config)) {
+        printf("ERR,INVALID_CONFIG\n");
+        reset_config_transaction();
+        return;
+    }
+
+    if (apply_and_save_config(&pending_config)) {
+        reset_config_transaction();
+        printf("CONFIG,COMMITTED\n");
+    }
+}
+
+static void command_config(char *arguments)
+{
+    if (arguments == NULL || *arguments == '\0') {
+        printf("ERR,CONFIG_COMMAND_REQUIRED\n");
+        return;
+    }
+
+    char *parameters = strchr(arguments, ',');
+
+    if (parameters != NULL) {
+        *parameters++ = '\0';
+    }
+
+    if (strcmp(arguments, "GET") == 0) {
+        if (parameters != NULL && *parameters != '\0') {
+            printf("ERR,UNEXPECTED_ARGUMENT\n");
+            return;
+        }
+
+        command_config_get();
+    } else if (strcmp(arguments, "DEBUG") == 0) {
+        if (parameters != NULL && *parameters != '\0') {
+            printf("ERR,UNEXPECTED_ARGUMENT\n");
+            return;
+        }
+
+        config_storage_debug();
+    } else if (strcmp(arguments, "BEGIN") == 0) {
+        command_config_begin(parameters);
+    } else if (strcmp(arguments, "PIN") == 0) {
+        command_config_pin(parameters);
+    } else if (strcmp(arguments, "I2C") == 0) {
+        command_config_i2c(parameters);
+    } else if (strcmp(arguments, "SPI") == 0) {
+        command_config_spi(parameters);
+    } else if (strcmp(arguments, "UART") == 0) {
+        command_config_uart(parameters);
+    } else if (strcmp(arguments, "COMMIT") == 0) {
+        if (parameters != NULL && *parameters != '\0') {
+            printf("ERR,UNEXPECTED_ARGUMENT\n");
+            return;
+        }
+
+        command_config_commit();
+    } else if (strcmp(arguments, "ABORT") == 0) {
+        reset_config_transaction();
+        printf("CONFIG,ABORTED\n");
+    } else {
+        printf("ERR,UNKNOWN_CONFIG_COMMAND\n");
+    }
 }
 
 static void command_pin(char *arguments)
@@ -265,13 +660,26 @@ static void command_read(char *arguments)
         return;
     }
 
-    if (!manager.gpio[pin].assigned ||
-        manager.gpio[pin].function != PIN_GPIO_INPUT) {
+    if (!manager.gpio[pin].assigned) {
         printf("ERR,PIN_NOT_INPUT\n");
         return;
     }
 
-    printf("VALUE,%lu,%u\n", pin, gpio_get((uint)pin) ? 1u : 0u);
+    if (manager.gpio[pin].function == PIN_GPIO_INPUT) {
+        printf("VALUE,%lu,%u\n", pin, gpio_get((uint)pin) ? 1u : 0u);
+        return;
+    }
+
+    if (manager.gpio[pin].function == PIN_ADC_INPUT &&
+        pin >= 26 && pin <= 28) {
+        adc_select_input((uint)(pin - 26));
+        (void)adc_read();
+        uint16_t value = adc_read();
+        printf("VALUE,%lu,%u\n", pin, value);
+        return;
+    }
+
+    printf("ERR,PIN_NOT_INPUT\n");
 }
 
 static void command_write(char *arguments)
@@ -482,6 +890,21 @@ static void process_command(char *line)
         } else {
             printf("ERR,UNEXPECTED_ARGUMENT\n");
         }
+    } else if (strcmp(command, "VERSION") == 0) {
+        if (arguments == NULL || *arguments == '\0') {
+            printf(
+                "VERSION,%u.%u.%u,PROTOCOL,%u,CONFIG,%u\n",
+                FIRMWARE_VERSION_MAJOR,
+                FIRMWARE_VERSION_MINOR,
+                FIRMWARE_VERSION_PATCH,
+                PROTOCOL_VERSION,
+                DEVICE_CONFIG_VERSION
+            );
+        } else {
+            printf("ERR,UNEXPECTED_ARGUMENT\n");
+        }
+    } else if (strcmp(command, "CONFIG") == 0) {
+        command_config(arguments);
     } else if (strcmp(command, "PIN") == 0) {
         command_pin(arguments);
     } else if (strcmp(command, "SIG") == 0) {

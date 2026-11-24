@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embedded Lab</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<header class="main-header">
+  <div>
+    <h1>Embedded Lab</h1>
+    <p>Embedded-Entwicklung, Projektanalyse und nachvollziehbare Tests</p>
+  </div>
+  <a href="{{ url_for('settings.settings_page') }}"
+     class="settings-link"
+     aria-label="Settings"
+     title="Settings">
+    <span aria-hidden="true">⚙</span>
+  </a>
+</header>
+<main>
+  {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="notice {{ category }}">{{ message }}</div>
+  {% endfor %}
+
+  <section class="panel">
+    <h2>Projektübersicht</h2>
+    <p>Projektablage: <code>{{ projects_root }}</code></p>
+    {% if projects %}
+    <table>
+      <thead><tr><th>Projekt</th><th>Validierung</th><th>Beschreibung</th></tr></thead>
+      <tbody>
+      {% for project in projects %}
+        <tr>
+          <td><strong>{{ project.name }}</strong><br><small>{{ project.id }}</small></td>
+          <td>
+            {% if project.errors %}
+              <span>Ungültig</span>
+              <ul>{% for error in project.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+            {% elif project.has_contract %}
+              Gültig
+            {% else %}
+              Kein Projektvertrag
+            {% endif %}
+          </td>
+          <td>{{ project.description or "Keine Beschreibung" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p>Noch keine Projekte vorhanden.</p>
+    {% endif %}
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Neues Projekt</h2>
+      <form method="post" action="{{ url_for('create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="project_id">Projekt-ID</label>
+        <input id="project_id" name="project_id" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="mein-embedded-projekt">
+        <label for="project_name">Projektname</label>
+        <input id="project_name" name="project_name" required placeholder="Mein Embedded-Projekt">
+        <label for="description">Beschreibung</label>
+        <textarea id="description" name="description" placeholder="Zweck, Funktionen und Anforderungen"></textarea>
+        <button type="submit">Projekt erstellen</button>
+      </form>
+      <small>Verwendet das vorhandene Pico-SDK-Template.</small>
+    </section>
+
+    <section class="panel">
+      <h2>Repository importieren</h2>
+      <form method="post" action="{{ url_for('import_project') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="source">Lokaler Pfad oder Git-URL</label>
+        <input id="source" name="source" required placeholder="/home/pi/mein-repository oder https://...">
+        <label for="project_id_import">Neue Projekt-ID</label>
+        <input id="project_id_import" name="project_id" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="importiertes-projekt">
+        <label for="import_mode">Quelle</label>
+        <select id="import_mode" name="mode">
+          <option value="local">Lokales Verzeichnis kopieren</option>
+          <option value="git">Git-Repository klonen</option>
+        </select>
+        <button type="submit">Importieren</button>
+      </form>
+      <small>Bestehende Zielverzeichnisse werden nicht überschrieben. Importierter Code wird nicht ausgeführt.</small>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Projektanalyse</h2>
+    <p>Prüft Projektvertrag, Anforderungen, Build-Konfiguration und Testverzeichnisse. Es werden keine Builds oder Tests gestartet und keine Projektdateien verändert.</p>
+    <form method="post" action="{{ url_for('analyze') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="analysis_project">Projekt</label>
+      <select id="analysis_project" name="project" required>
+        {% for project in project_names %}
+          <option value="{{ project }}">{{ project }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Projekt analysieren</button>
+    </form>
+    {% if analysis %}
+      <div class="notice">
+        <strong>Analyse: {{ analysis.name }}</strong>
+        <p>Projektvertrag: {{ "vorhanden" if analysis.has_contract else "fehlt" }}</p>
+        {% if analysis.errors %}
+          <strong>Validierungsfehler</strong>
+          <ul>{% for error in analysis.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+        {% endif %}
+        <p>Anforderungsdatei: {{ analysis.requirements or "nicht konfiguriert" }}</p>
+        <p>Gefundene Testdateien: {{ analysis.tests|length }}</p>
+        <ul>{% for test in analysis.tests %}<li><code>{{ test }}</code></li>{% else %}<li>Keine Testdateien gefunden.</li>{% endfor %}</ul>
+        <p>Hinweis: Das Vorhandensein von Tests beweist weder deren Vollständigkeit noch die Korrektheit der Firmware.</p>
+
+        {% if analysis.plan %}
+          <hr>
+          <h3>Ablaufplan</h3>
+          <p><strong>Status:</strong> {{ analysis.plan.status }}</p>
+          <p><strong>Modus:</strong> Nur Planung – keine Ausführung</p>
+          <p><strong>Build oder Tests ausgeführt:</strong> Nein</p>
+          <p><strong>Firmware geflasht:</strong> Nein</p>
+
+          {% if analysis.plan.errors %}
+            <strong>Fehler</strong>
+            <ul>{% for error in analysis.plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+          {% endif %}
+
+          {% if analysis.plan.warnings %}
+            <strong>Hinweise</strong>
+            <ul>{% for warning in analysis.plan.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+          {% endif %}
+
+          <h4>Prüfergebnisse</h4>
+          <ul>
+            {% for key, check in analysis.plan.checks.items() %}
+              <li>
+                <strong>{{ key }}:</strong>
+                {% if check.status is defined %}
+                  {{ check.status }}
+                {% else %}
+                  Details siehe Unterpunkte
+                {% endif %}
+                {% if check.count is defined %}
+                  ({{ check.count }} Anforderungen)
+                {% endif %}
+                {% if check.errors %}
+                  <ul>{% for error in check.errors %}<li><strong>Fehler:</strong> {{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+                {% if check.warnings %}
+                  <ul>{% for warning in check.warnings %}<li><strong>Hinweis:</strong> {{ warning }}</li>{% endfor %}</ul>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+
+          {% if analysis.plan.checks.traceability %}
+            {% set trace = analysis.plan.checks.traceability %}
+            <h4>Traceability – Anforderungsabdeckung</h4>
+            <p>
+              Status: <strong>{{ trace.status }}</strong> –
+              {{ trace.covered_requirements|length }} von
+              {{ trace.requirement_count }} Anforderungen mit auflösbarem
+              Hardwaretest.
+              {{ trace.test_case_count }} Testfälle gefunden.
+            </p>
+
+            {% if trace.covered_requirements %}
+              <p><strong>Abgedeckte Anforderungen</strong></p>
+              <ul>{% for item in trace.covered_requirements %}<li>{{ item }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            {% if trace.uncovered_requirements %}
+              <p><strong>Nicht abgedeckte Anforderungen</strong></p>
+              <ul>{% for item in trace.uncovered_requirements %}<li>{{ item }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            {% if trace.unresolved_test_references %}
+              <p><strong>Nicht auflösbare Testreferenzen</strong></p>
+              <ul>{% for item in trace.unresolved_test_references %}
+                <li>Anforderung {{ item.requirement_id }} → Test {{ item.test_id }}</li>
+              {% endfor %}</ul>
+            {% endif %}
+
+            {% if trace.unknown_requirement_references %}
+              <p><strong>Unbekannte Requirement-Referenzen</strong></p>
+              <ul>{% for item in trace.unknown_requirement_references %}
+                <li>Test {{ item.test_id }} → Anforderung {{ item.requirement_id }}</li>
+              {% endfor %}</ul>
+            {% endif %}
+          {% endif %}
+
+          {% if analysis.plan.checks.requirements.requirements %}
+            <h4>Erkannte Anforderungen</h4>
+            <ul>
+              {% for requirement in analysis.plan.checks.requirements.requirements %}
+                <li>
+                  <strong>{{ requirement.id or "Ohne ID" }}:</strong>
+                  {{ requirement.description or "Keine Beschreibung" }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          <h4>Geplante Schritte</h4>
+          <ul>
+            {% for step in analysis.plan.steps %}
+              <li>
+                <strong>{{ step.id }}:</strong> {{ step.description }}
+                <br><small>Status: {{ step.status }}
+                {% if step.requires_approval %} – Freigabe erforderlich{% endif %}
+                {% if step.requires_explicit_approval %} – ausdrückliche Freigabe erforderlich{% endif %}
+                </small>
+              </li>
+            {% endfor %}
+          </ul>
+
+          {% if analysis.plan.status == "ready_for_review" and not analysis.errors and not analysis.plan.errors %}
+            <div class="notice">
+              <strong>Build manuell freigeben</strong>
+              <p>Es werden Build-Kommandos für dieses Projekt ausgeführt. Es wird keine Firmware geflasht und es werden keine Tests gestartet.</p>
+              <form method="post" action="{{ url_for('build_project') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="project" value="{{ analysis.id }}">
+                <input type="hidden" name="fingerprint" value="{{ analysis.fingerprint }}">
+                <input type="hidden" name="approval_token" value="{{ analysis.approval_token }}">
+                <label>
+                  <input type="checkbox" name="confirm_build" value="yes" required style="width:auto">
+                  Ich erlaube ausdrücklich, den Build für dieses Projekt auszuführen.
+                </label>
+                <button type="submit">Build jetzt ausführen</button>
+              </form>
+            </div>
+          {% endif %}
+        {% endif %}
+
+        {% if analysis.build_result %}
+          <hr>
+          <h3>Build-Ergebnis</h3>
+          <p><strong>Status:</strong> <span id="build-status">{{ analysis.build_result.status }}</span></p>
+          <p><strong>Build ausgeführt:</strong> {{ "Ja" if analysis.build_result.execution_performed else "Nein" }}</p>
+          <p><strong>Firmware geflasht:</strong> Nein</p>
+          <p><strong>Tests ausgeführt:</strong> Nein</p>
+
+          {% if analysis.build_result.errors %}
+            <strong>Fehler und Hinweise</strong>
+            <ul>{% for error in analysis.build_result.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+          {% endif %}
+
+          {% if analysis.build_result.report_path %}
+            <p>Bericht: <code>{{ analysis.build_result.report_path }}</code></p>
+          {% endif %}
+
+          {% for command in analysis.build_result.commands %}
+            <div class="notice">
+              <strong>Kommando – Status: {{ command.status }}</strong>
+              <p><code>{{ command.argv | join(" ") }}</code></p>
+              {% if command.returncode is not none %}
+                <p>Rückgabecode: {{ command.returncode }}</p>
+              {% endif %}
+              {% if command.stdout %}
+                <details>
+                  <summary>Standardausgabe</summary>
+                  <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">{{ command.stdout[:12000] }}</pre>
+                </details>
+              {% endif %}
+              {% if command.stderr %}
+                <details open>
+                  <summary>Fehlerausgabe</summary>
+                  <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">{{ command.stderr[:12000] }}</pre>
+                </details>
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+  <p class="muted"><small>Erste Entwicklungsstufe: KI-Backend, Freigabeworkflow und autonome Build-/Testschleifen sind noch nicht aktiviert. Kein automatisches Flashen.</small></p>
+</main>
+{% if analysis.build_result and analysis.build_result.job_id %}
+<div
+  id="build-logs-config"
+  data-url="{{ url_for('build_logs', job_id=analysis.build_result.job_id) }}"
+></div>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+{% endif %}
+</body>
+</html>

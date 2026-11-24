@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<title>Settings – Embedded Lab</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+</head>
+<body>
+<header class="settings-header">
+  <div>
+    <h1>Settings</h1>
+    <p>Application configuration</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="back-link">Back to Embedded Lab</a>
+</header>
+
+<main>
+<nav class="settings-tabs" role="tablist">
+  <button type="button" class="active"
+          data-settings-tab="general"
+          role="tab" aria-selected="true">
+    General
+  </button>
+  <button type="button"
+          data-settings-tab="test-interface"
+          role="tab" aria-selected="false">
+    Test Interface
+  </button>
+  <button type="button"
+          data-settings-tab="llm"
+          role="tab" aria-selected="false">
+    LLM Configuration
+  </button>
+</nav>
+
+<section class="settings-panel"
+         data-settings-panel="general"
+         role="tabpanel">
+  <h2>General</h2>
+  <p>General application settings will be configured here.</p>
+</section>
+
+<section class="settings-panel"
+         data-settings-panel="test-interface"
+         role="tabpanel" hidden>
+  <h2>Test Interface</h2>
+  <p>Manage connected testbench devices and their hardware configuration.</p>
+
+  <div class="device-list-section">
+    <h3>Connected Devices</h3>
+    <p id="device-status" class="muted">Loading devices...</p>
+    <div id="device-list" class="device-grid"></div>
+  </div>
+
+  <div class="device-config-section" id="device-config-section" hidden>
+    <h3>Device Configuration</h3>
+    <div class="device-config-toolbar">
+      <strong id="selected-device-name">No device selected</strong>
+    </div>
+
+    <div id="config-status" class="muted">
+      Select a connected device.
+    </div>
+    <div id="device-config-editor"></div>
+
+    <button type="button" id="save-device-config" disabled>
+      Apply Configuration
+    </button>
+  </div>
+</section>
+
+<section class="settings-panel"
+         data-settings-panel="llm"
+         role="tabpanel" hidden>
+  <h2>LLM Configuration</h2>
+  <p>LLM providers and model settings will be configured here.</p>
+</section>
+</main>
+
+<script src="{{ url_for('static', filename='js/settings.js') }}" defer></script>
+</body>
+</html>

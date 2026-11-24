@@ -2,6 +2,7 @@
 #include "gpio_configurator.h"
 
 #include "hardware/gpio.h"
+#include "hardware/adc.h"
 
 static bool pico_gpio_init(void *context, uint8_t pin)
 {
@@ -134,5 +135,17 @@ bool gpio_configurator_apply_pico(const device_config_t *config)
         return false;
     }
 
-    return configure_peripheral_pins(config);
+    if (!configure_peripheral_pins(config)) {
+        return false;
+    }
+
+    adc_init();
+
+    for (uint8_t pin = 26; pin <= 28; pin++) {
+        if (config->pins[pin].function == PIN_ADC_INPUT) {
+            adc_gpio_init(pin);
+        }
+    }
+
+    return true;
 }

@@ -35,6 +35,9 @@ The current implementation includes:
 - Build execution through the web interface
 - Build status and command output reporting
 - Serial-based hardware test execution
+- Device discovery and device management
+- Web-based system settings for connected Pico devices
+- Device version and configuration inspection
 - Structured JSON test reports
 
 The hardware test runner communicates with connected devices over serial interfaces and executes defined test steps.
@@ -188,9 +191,7 @@ The platform is under active development. The following capabilities are planned
 
 - **AI integration:** AI-assisted project analysis, code generation, and modification.
 - **Automated development workflow:** Iterative requirement evaluation, implementation, build execution, and hardware testing.
-- **Hardware discovery:** Automatic detection and identification of connected test devices.
 - **Hardware selection:** Selecting available Pico devices through the web interface instead of relying on hardcoded device identifiers.
-- **System settings:** A central settings area for managing connected devices and system-wide configuration.
 - **Extended hardware abstraction:** Support for additional microcontrollers, measurement devices, and debugging interfaces.
 - **Extended signal testing:** Higher-frequency measurements, advanced timing analysis, and additional signal test modes.
 - **Peripheral integration:** Complete runtime integration and hardware validation of I2C, SPI, and UART communication.

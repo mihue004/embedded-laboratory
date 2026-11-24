@@ -13,6 +13,7 @@ VALID_GPIO_PINS = set(range(0, 23)) | {26, 27, 28}
 SUPPORTED_ACTIONS = {
     "gpio.write",
     "gpio.read",
+    "adc.read",
     "signal.square",
     "signal.stop",
     "serial.ready",
@@ -34,6 +35,7 @@ TOP_LEVEL_KEYS = {
 ACTION_KEYS = {
     "gpio.write": {"action", "pin_number", "value"},
     "gpio.read": {"action", "pin_number", "expect_value"},
+    "adc.read": {"action", "pin_number", "expect_min", "expect_max"},
     "signal.square": {
         "action", "pin_number", "frequency_hz", "duty_percent"
     },
@@ -175,6 +177,32 @@ def validate_test_case(document):
             if not _is_integer(expected) or expected not in (0, 1):
                 errors.append(
                     f"{prefix}: expect_value must be integer 0 or 1."
+                )
+
+        if action == "adc.read":
+            pin = step.get("pin_number")
+            if not _is_integer(pin) or pin not in {26, 27, 28}:
+                errors.append(
+                    f"{prefix}: ADC pin_number must be GPIO 26, 27 or 28."
+                )
+
+            minimum = step.get("expect_min")
+            maximum = step.get("expect_max")
+            if not _is_integer(minimum) or not 0 <= minimum <= 4095:
+                errors.append(
+                    f"{prefix}: expect_min must be an integer between 0 and 4095."
+                )
+            if not _is_integer(maximum) or not 0 <= maximum <= 4095:
+                errors.append(
+                    f"{prefix}: expect_max must be an integer between 0 and 4095."
+                )
+            if (
+                _is_integer(minimum)
+                and _is_integer(maximum)
+                and minimum > maximum
+            ):
+                errors.append(
+                    f"{prefix}: expect_min must not exceed expect_max."
                 )
 
         if action == "signal.square":

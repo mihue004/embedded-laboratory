@@ -82,7 +82,7 @@ def execute_step(port, step):
         prefix = ["OK", "WRITE"]
         expected_fields = [f"GPIO={pin}", f"VALUE={value}"]
 
-    elif action == "gpio.read":
+    elif action in {"gpio.read", "adc.read"}:
         pin = int(step["pin_number"])
         command = f"READ,{pin}"
 
@@ -127,7 +127,7 @@ def execute_step(port, step):
     if response.startswith("ERR,"):
         raise RuntimeError(f"{command} -> {response}")
 
-    if action == "gpio.read":
+    if action in {"gpio.read", "adc.read"}:
         fields = response.split(",")
 
         if len(fields) != 3 or fields[0] != "VALUE":
@@ -136,10 +136,14 @@ def execute_step(port, step):
         try:
             actual_pin = int(fields[1])
             actual_value = int(fields[2])
-            expected = int(step["expect_value"])
+            if action == "gpio.read":
+                expected = int(step["expect_value"])
+            else:
+                minimum = int(step["expect_min"])
+                maximum = int(step["expect_max"])
         except (ValueError, TypeError) as error:
             raise RuntimeError(
-                f"Ungültige GPIO-Leseantwort: {response}"
+                f"Ungültige Leseantwort: {response}"
             ) from error
 
         if actual_pin != pin:
@@ -148,13 +152,23 @@ def execute_step(port, step):
                 f"erhalten {actual_pin}"
             )
 
-        if actual_value not in (0, 1):
-            raise RuntimeError(f"Ungültiger GPIO-Wert: {actual_value}")
+        if action == "gpio.read":
+            if actual_value not in (0, 1):
+                raise RuntimeError(f"Ungültiger GPIO-Wert: {actual_value}")
 
-        if actual_value != expected:
-            raise AssertionError(
-                f"GPIO {pin}: erwartet {expected}, erhalten {actual_value}"
-            )
+            if actual_value != expected:
+                raise AssertionError(
+                    f"GPIO {pin}: erwartet {expected}, erhalten {actual_value}"
+                )
+        else:
+            if not 0 <= actual_value <= 4095:
+                raise RuntimeError(f"Ungültiger ADC-Wert: {actual_value}")
+
+            if not minimum <= actual_value <= maximum:
+                raise AssertionError(
+                    f"ADC GPIO {pin}: erwartet {minimum} bis {maximum}, "
+                    f"erhalten {actual_value}"
+                )
 
     elif action == "gpio.write":
         _expect_fields(response, prefix, expected_fields)

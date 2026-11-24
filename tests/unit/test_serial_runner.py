@@ -122,6 +122,54 @@ def test_gpio_read_rejects_wrong_value():
         )
 
 
+def test_adc_read_accepts_value_within_range():
+    port = FakePort(b"VALUE,26,2048\n")
+
+    result = runner.execute_step(
+        port,
+        {
+            "action": "adc.read",
+            "pin_number": 26,
+            "expect_min": 1000,
+            "expect_max": 3000,
+        },
+    )
+
+    assert result["result"] == "PASS"
+    assert port.commands == ["READ,26\n"]
+
+
+def test_adc_read_rejects_value_outside_range():
+    port = FakePort(b"VALUE,26,3500\n")
+
+    with pytest.raises(AssertionError, match="erwartet 1000 bis 3000"):
+        runner.execute_step(
+            port,
+            {
+                "action": "adc.read",
+                "pin_number": 26,
+                "expect_min": 1000,
+                "expect_max": 3000,
+            },
+        )
+
+
+@pytest.mark.parametrize("value", [-1, 4096])
+def test_adc_read_rejects_invalid_hardware_value(value):
+    port = FakePort(f"VALUE,26,{value}\n".encode())
+
+    with pytest.raises(RuntimeError, match="Ungültiger ADC-Wert"):
+        runner.execute_step(
+            port,
+            {
+                "action": "adc.read",
+                "pin_number": 26,
+                "expect_min": 0,
+                "expect_max": 4095,
+            },
+        )
+
+
 def test_signal_square_checks_parameters():
     port = FakePort(b"OK,SIGNAL,GPIO=15,FREQ=1000,DUTY=50\n")
 

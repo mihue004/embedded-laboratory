@@ -1,0 +1,396 @@
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-header p {
+  margin-bottom: 0;
+}
+
+.back-link {
+  color: #b6c2b3;
+  text-decoration: none;
+  border: 1px solid #536353;
+  border-radius: 5px;
+  padding: 9px 12px;
+}
+
+.back-link:hover {
+  color: #71e864;
+  border-color: #71e864;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #354435;
+  margin-bottom: 24px;
+}
+
+.settings-tabs a {
+  color: #b6c2b3;
+  text-decoration: none;
+  padding: 12px 16px;
+  border-bottom: 3px solid transparent;
+}
+
+.settings-tabs a:hover,
+.settings-tabs a.active {
+  color: #71e864;
+  border-bottom-color: #56b04c;
+}
+
+.settings-panel {
+  background: #1b211b;
+  border: 1px solid #354435;
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 22px;
+  scroll-margin-top: 20px;
+}
+
+@media (max-width: 600px) {
+  .settings-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-tabs a {
+    padding: 10px;
+  }
+}
+
+.settings-tabs button {
+  margin: 0;
+  padding: 12px 16px;
+  background: transparent;
+  color: #b6c2b3;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.settings-tabs button:hover {
+  color: #71e864;
+  background: #1b211b;
+}
+
+.settings-tabs button.active {
+  color: #71e864;
+  border-bottom-color: #56b04c;
+}
+
+.device-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.device-role-card,
+.device-card {
+  background: #222b22;
+  border: 1px solid #354435;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.device-role-card h3,
+.device-card h3 {
+  margin-top: 0;
+}
+
+.device-role-card select {
+  width: 100%;
+  padding: 10px;
+  color: #e0e8df;
+  background: #151b15;
+  border: 1px solid #536353;
+  border-radius: 5px;
+}
+
+.device-list-section {
+  margin-top: 32px;
+}
+
+#device-list {
+  display: grid;
+  gap: 12px;
+}
+
+.device-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.device-card p {
+  margin: 5px 0;
+  color: #b6c2b3;
+}
+
+.device-status {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.device-status.connected {
+  color: #71e864;
+}
+
+.device-status.disconnected {
+  color: #e6a35c;
+}
+
+.device-unassignable {
+  opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+  .device-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* Connected device overview */
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.device-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: #e0e8df;
+  background: #222b22;
+  border: 1px solid #354435;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.device-card:hover,
+.device-card.selected {
+  border-color: #71e864;
+}
+
+.device-card h3 {
+  margin: 0 0 10px;
+}
+
+.device-card p {
+  margin: 5px 0;
+  color: #b6c2b3;
+  overflow-wrap: anywhere;
+}
+
+.device-card .device-status {
+  color: #71e864;
+  font-weight: 600;
+}
+
+.device-config-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #354435;
+}
+
+.device-config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+@media (max-width: 600px) {
+  .device-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pico-pinout {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(180px, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.pico-pin-column {
+  display: grid;
+  grid-template-rows: repeat(20, minmax(42px, auto));
+  gap: 4px;
+}
+
+.pico-header-row {
+  min-height: 42px;
+}
+
+.pico-pin {
+  display: grid;
+  grid-template-columns: 42px minmax(110px, 1fr);
+  gap: 5px;
+  align-items: center;
+  padding: 4px 7px;
+  border: 1px solid var(--border-color, #888);
+  border-radius: 5px;
+  background: var(--card-background, transparent);
+}
+
+.pico-pin select,
+.pico-pin input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pico-pin .pico-instance,
+.pico-pin-settings {
+  grid-column: 1 / -1;
+}
+
+.pico-pin-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.pico-pin-settings label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+}
+
+.pico-pin-settings input,
+.pico-pin-settings select {
+  width: 100%;
+}
+
+.pico-pin-unavailable,
+.pico-header-spacer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+  border: 1px dashed var(--border-color, #888);
+  border-radius: 5px;
+}
+
+.pico-board-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-secondary, #7772);
+  writing-mode: vertical-rl;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+@media (max-width: 800px) {
+  .pico-pinout {
+    grid-template-columns: minmax(160px, 1fr) 36px minmax(160px, 1fr);
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .pico-pin {
+    grid-template-columns: 1fr;
+  }
+
+  .pico-board-center {
+    min-width: 36px;
+    padding: 4px;
+  }
+}
+
+
+/* Compact Pico pin configuration */
+.pico-pin-column {
+  grid-template-rows: repeat(20, minmax(38px, auto));
+}
+
+.pico-pin {
+  display: grid;
+  grid-template-columns: 42px minmax(110px, 1fr) minmax(82px, auto) minmax(92px, auto);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pico-pin strong {
+  white-space: nowrap;
+}
+
+.pico-pin select,
+.pico-pin input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 5px;
+  font-size: 0.82rem;
+}
+
+.pico-pin .pico-instance {
+  grid-column: auto;
+}
+
+.pico-header-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 4px;
+  color: #aeb9ae;
+  background: #252d25;
+  border: 1px solid #435043;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.pico-board-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  padding: 12px;
+  color: #aeb9ae;
+  background: #252d25;
+  border: 2px solid #435043;
+  border-radius: 12px;
+  writing-mode: vertical-rl;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 900px) {
+  .pico-pinout {
+    grid-template-columns: minmax(230px, 1fr) 48px minmax(230px, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .pico-pinout {
+    min-width: 680px;
+  }
+}

@@ -127,6 +127,46 @@ class TestValidateTestCase(unittest.TestCase):
         result = validate_test_case(case)
         self.assertTrue(any("missing fields" in e for e in result["errors"]))
 
+    def test_accepts_valid_adc_read(self):
+        case = valid_case()
+        case["steps"] = [
+            {
+                "action": "adc.read",
+                "pin_number": 26,
+                "expect_min": 1000,
+                "expect_max": 3000,
+            }
+        ]
+        result = validate_test_case(case)
+        self.assertEqual(result["status"], "valid")
+        self.assertEqual(result["errors"], [])
+
+    def test_rejects_invalid_adc_pin(self):
+        case = valid_case()
+        case["steps"] = [
+            {
+                "action": "adc.read",
+                "pin_number": 25,
+                "expect_min": 0,
+                "expect_max": 4095,
+            }
+        ]
+        result = validate_test_case(case)
+        self.assertTrue(any("ADC pin_number" in e for e in result["errors"]))
+
+    def test_rejects_invalid_adc_range(self):
+        case = valid_case()
+        case["steps"] = [
+            {
+                "action": "adc.read",
+                "pin_number": 26,
+                "expect_min": 3000,
+                "expect_max": 1000,
+            }
+        ]
+        result = validate_test_case(case)
+        self.assertTrue(any("expect_min must not exceed" in e for e in result["errors"]))
+
     def test_rejects_invalid_signal_parameters(self):
         case = valid_case()
         case["steps"] = [
