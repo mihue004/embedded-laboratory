@@ -39,6 +39,10 @@ The current implementation includes:
 - Web-based system settings for connected Pico devices
 - Device version and configuration inspection
 - Structured JSON test reports
+- LLM provider configuration for OpenAI, Anthropic, Google Gemini, and self-hosted APIs
+- Encrypted API key storage
+- Active LLM provider selection and configuration management
+- Google Gemini API integration with an interactive prompt test interface
 
 The hardware test runner communicates with connected devices over serial interfaces and executes defined test steps.
 
@@ -157,6 +161,29 @@ Install the required system build tools using the package manager of your host s
 
 For Pico SDK projects, CMake, Ninja, and the ARM GNU Toolchain must be available.
 
+### LLM Configuration Storage
+
+Before starting the web application, create the configuration directory for LLM provider settings and encrypted API keys:
+
+```bash
+sudo mkdir -p /var/lib/embedded-lab
+sudo chown "$USER":"$USER" /var/lib/embedded-lab
+sudo chmod 700 /var/lib/embedded-lab
+```
+
+The directory must be owned by the operating system user running the web application.
+
+The following files are created automatically when the LLM configuration is initialized:
+
+| File | Purpose |
+|---|---|
+| `llm-providers.json` | Provider configurations and encrypted API keys |
+| `llm.key` | Encryption key used for API key protection |
+
+API keys are encrypted at rest using Fernet symmetric encryption. Both files are stored outside the Git repository.
+
+**Important:** Keep both files together and protect them from unauthorized access. Losing `llm.key` prevents access to previously encrypted API keys. Back up both files securely.
+
 ## Starting the Web Interface
 
 Start the application from the repository root:
@@ -175,6 +202,21 @@ The host and port can be configured through environment variables:
 
 The project storage directory can be configured using `EMBEDDED_PROJECTS_ROOT`. If not specified, projects are stored in `~/embedded-projects`.
 
+## LLM Configuration
+
+Embedded Lab includes a web-based interface for configuring Large Language Model (LLM) providers.
+
+The configuration interface currently supports:
+
+- OpenAI
+- Anthropic
+- Google Gemini
+- Self-hosted or custom API endpoints
+
+Google Gemini is currently integrated as an operational API provider. OpenAI and Anthropic provider communication, as well as the self-hosted API integration, are not yet implemented.
+
+Only one provider can be active at a time. Multiple provider configurations can be stored.
+
 ## Running Unit Tests
 
 Activate the virtual environment and execute:
@@ -189,7 +231,7 @@ The test configuration is defined in `pytest.ini`.
 
 The platform is under active development. The following capabilities are planned or require further implementation:
 
-- **AI integration:** AI-assisted project analysis, code generation, and modification.
+- **AI-assisted development workflow:** Automated project analysis, requirement evaluation, code generation, and controlled code modification are still under development.
 - **Automated development workflow:** Iterative requirement evaluation, implementation, build execution, and hardware testing.
 - **Hardware selection:** Selecting available Pico devices through the web interface instead of relying on hardcoded device identifiers.
 - **Extended hardware abstraction:** Support for additional microcontrollers, measurement devices, and debugging interfaces.

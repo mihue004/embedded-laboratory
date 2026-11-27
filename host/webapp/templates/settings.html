@@ -7,6 +7,7 @@
 <title>Settings – Embedded Lab</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/llm_settings.css') }}">
 </head>
 <body>
 <header class="settings-header">
@@ -75,11 +76,11 @@
 <section class="settings-panel"
          data-settings-panel="llm"
          role="tabpanel" hidden>
-  <h2>LLM Configuration</h2>
-  <p>LLM providers and model settings will be configured here.</p>
+  {% include "llm_settings.html" %}
 </section>
 </main>
 
 <script src="{{ url_for('static', filename='js/settings.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/llm_settings.js') }}" defer></script>
 </body>
 </html>

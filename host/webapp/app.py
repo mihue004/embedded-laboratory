@@ -15,6 +15,7 @@ from pathlib import Path
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "core"))
 PROJECTS_ROOT = Path(
     os.environ.get("EMBEDDED_PROJECTS_ROOT", "~/embedded-projects")
 ).expanduser().resolve()
@@ -28,8 +29,10 @@ from build_executor import execute_build
 
 app = Flask(__name__)
 from settings.routes import settings_bp
+from settings.llm_routes import llm_bp
 
 app.register_blueprint(settings_bp, url_prefix="/settings")
+app.register_blueprint(llm_bp, url_prefix="/settings/llm")
 app.secret_key = os.environ.get("EMBEDDED_LAB_SESSION_SECRET") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,

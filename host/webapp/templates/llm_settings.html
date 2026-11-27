@@ -1,0 +1,49 @@
+
+<div class="llm-settings">
+  <h2>LLM Configuration</h2>
+  <p class="muted">
+    Configure the language model provider and connection settings.
+  </p>
+
+  <div class="llm-provider-section">
+    <label for="llm-provider">Provider</label>
+    <select id="llm-provider" name="provider">
+      <option value="">Select a provider</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="google">Google Gemini</option>
+      <option value="self-hosted">Self-hosted / Custom API</option>
+    </select>
+  </div>
+
+  <div id="llm-provider-config" hidden>
+    <div id="llm-provider-fields"></div>
+  </div>
+
+  <div id="llm-connection-status" class="muted" aria-live="polite"></div>
+  <div id="llm-test-section" class="llm-test-section" hidden>
+    <h3>Test Google Gemini</h3>
+    <p class="muted">
+      Send a test prompt to the active Gemini model.
+    </p>
+
+    <label for="llm-test-prompt">Test prompt</label>
+    <textarea
+      id="llm-test-prompt"
+      rows="4"
+      placeholder="Enter a prompt to test the Gemini connection..."
+    ></textarea>
+
+    <div class="llm-actions">
+      <button id="llm-test-button" type="button" disabled>
+        Send Test Prompt
+      </button>
+    </div>
+
+    <div
+      id="llm-test-result"
+      class="llm-test-result"
+      aria-live="polite"
+    ></div>
+  </div>
+</div>

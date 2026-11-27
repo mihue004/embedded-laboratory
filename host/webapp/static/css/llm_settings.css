@@ -1,0 +1,97 @@
+.llm-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.llm-provider-section {
+  display: grid;
+  gap: 8px;
+  max-width: 500px;
+}
+
+.llm-settings select,
+.llm-settings input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  color: #e0e8df;
+  background: #151b15;
+  border: 1px solid #536353;
+  border-radius: 5px;
+}
+
+.llm-settings select:focus,
+.llm-settings input:focus {
+  outline: 1px solid #71e864;
+  border-color: #71e864;
+}
+
+.llm-provider-config {
+  display: grid;
+  gap: 16px;
+}
+
+#llm-provider-fields {
+  display: grid;
+  gap: 16px;
+  max-width: 500px;
+}
+
+.llm-field {
+  display: grid;
+  gap: 7px;
+}
+
+.llm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.llm-connection-status {
+  margin-top: 12px;
+}
+
+.llm-settings .error {
+  color: #e67c7c;
+}
+
+.llm-settings button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-test-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(127, 127, 127, 0.35);
+}
+
+.llm-test-section textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  box-sizing: border-box;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(127, 127, 127, 0.5);
+  border-radius: 6px;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.llm-test-result {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.llm-test-result:empty {
+  display: none;
+}
